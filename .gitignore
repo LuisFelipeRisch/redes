@@ -1,2 +1,3 @@
-/moves
-/photos
+*.mp4
+*.txt
+*.logs

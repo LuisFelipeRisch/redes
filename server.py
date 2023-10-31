@@ -1,61 +1,114 @@
+from datetime import datetime
 import socket
 import threading
+import cv2
+import struct
 
-PORT = 5050
 SERVER = socket.gethostbyname(socket.gethostname())
+PORT = 3030
 ADDRESS = (SERVER, PORT)
-DISCONNECT_IDENTIFIER = 0
-BUFFER_SIZE = 1024
-MEDIA_PATH = 'moves/move1.mp4'
+MEDIA_PATH = "drone-video.mp4"
+MAX_PAYLOAD_SIZE = 60000
+HEADER_FORMAT = "!IIH"
+HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
+CONFIG_FORMAT = "!II"
+MAX_PACKAGE_SIZE = HEADER_SIZE + MAX_PAYLOAD_SIZE
+START_MESSAGE = '!start'
 
 server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-
 server.bind(ADDRESS)
 
-def handle_client(encoded_data, address):
-  print(f"[NEW CONNECTION] {address} wants to receive the full video")
 
-  data = encoded_data.decode()
+def get_timestamp():
+    timestamp = datetime.now()
+    return timestamp.strftime("%d-%m-%Y %H:%M:%S")
 
-  print(f"[{address}] {data}")
 
-  with open(MEDIA_PATH, 'rb') as media:
-    package_count = 1
+def add_log(message: str):
+    print(f"[{get_timestamp()}]: {message}")
 
-    while True:
-      media_data = media.read(BUFFER_SIZE - 4)
 
-      if media_data:
-        data = package_count.to_bytes(4, 'big')
-        data += media_data
+def get_video_length(video) -> float:
+    fps = int(video.get(cv2.CAP_PROP_FPS))
+    frame_count = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
+    return frame_count / fps
 
-        server.sendto(data, address)
 
-        package_count += 1
-      else:
-        break
+def build_packet(frame_number: int, sequence_number: int, payload: bytes) -> bytes:
+    # Build the package header
+    header = struct.pack(HEADER_FORMAT, frame_number,
+                         sequence_number, len(payload))
+    # Prepend the header to the payload
+    packet = header + payload
+    return packet
 
-  print(f"[SERVER] Finished to send Media to {address}")
 
-  data = DISCONNECT_IDENTIFIER.to_bytes(4, 'big')
+def build_video_config(width: int, height: int) -> bytes:
+    data = struct.pack(CONFIG_FORMAT, width, height)
+    packet = build_packet(0, 0, data)
+    return packet
 
-  server.sendto(data, address)
+
+def handle_client(data: bytes, address):
+    decoded_data = data.decode("utf-8")
+    add_log(
+        f"New connection from {address} with message: {decoded_data}.")
+    if decoded_data != START_MESSAGE:
+        add_log(f"Unknown message from {address}")
+        return
+
+    video_capture = cv2.VideoCapture(MEDIA_PATH)
+    frame_width = int(video_capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+    frame_height = int(video_capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    config_packet = build_video_config(frame_width, frame_height)
+    server.sendto(config_packet, address)
+
+    ret, frame = video_capture.read()
+    frame_number = 1
+
+    while ret:
+        frame_data = frame.tobytes()
+        chunks = [frame_data[i:i + MAX_PAYLOAD_SIZE]
+                  for i in range(0, len(frame_data), MAX_PAYLOAD_SIZE)]
+
+        sequence_number = 0
+        initial_packet = build_packet(
+            frame_number, sequence_number, len(chunks).to_bytes(4, 'big'))
+        server.sendto(initial_packet, address)
+
+        sequence_number += 1
+
+        for chunk in chunks:
+            packet = build_packet(frame_number, sequence_number, chunk)
+
+            add_log(f"Sending package to {address}")
+            add_log(
+                f"[PACKAGE INFO]: frame: {frame_number} - sequence: {sequence_number} - size: {len(chunk)}")
+            server.sendto(packet, address)
+
+            sequence_number += 1
+
+        ret, frame = video_capture.read()
+        frame_number += 1
+
 
 def start_server():
-  print(f"[SERVER] server is running in address: {SERVER} on port: {PORT}")
+    add_log(f"Server is listening on {SERVER}:{PORT}")
+    while True:
+        data, address = server.recvfrom(MAX_PACKAGE_SIZE)
+        thread = threading.Thread(
+            target=handle_client, args=(data, address)
+        )
+        thread.start()
+        add_log(f"{threading.active_count() - 1} active communication.")
 
-  while True:
-    encoded_data, address = server.recvfrom(BUFFER_SIZE)
 
-    thread = threading.Thread(target=handle_client, args=(encoded_data, address))
-    thread.start()
+def main():
+    add_log("Starting server...")
+    start_server()
+    add_log("Closing server...")
+    server.close()
+    add_log("Server closed")
 
-    print(f"[ACTIVE CONNECTIONS] {threading.active_count() - 1}")
 
-print("[SERVER] is starting...")
-
-start_server()
-
-print("[SERVER] is closing...")
-
-server.close()
+main()
