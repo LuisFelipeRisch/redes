@@ -39,9 +39,6 @@ client.connect(ADDRESS)
 # frames_buffer: = []
 frames: Dict[str, FrameDict] = {}
 
-frame_height = 0
-frame_width = 0
-
 
 def get_timestamp():
     timestamp = datetime.now()
@@ -57,19 +54,10 @@ def start_communication():
     client.sendto(START_MESSAGE.encode('utf-8'), ADDRESS)
 
 
-def read_video_config(data: bytes):
-    global frame_height, frame_width
-
-    width, height = struct.unpack(CONFIG_FORMAT, data)
-
-    frame_height = height
-    frame_width = width
-
-
 def play_frame(frame_data: bytes):
     frame = numpy.frombuffer(frame_data, dtype=numpy.uint8)
-    add_log(f"HEIGHT: {frame_height} - WIDTH: {frame_width}")
-    frame = frame.reshape((frame_height, frame_width, 3))
+    frame = frame.reshape(frame.shape[0], 1)
+    frame = cv2.imdecode(frame, cv2.IMREAD_COLOR)
     cv2.imshow('Video', frame)
     cv2.waitKey(25)
 
@@ -130,10 +118,7 @@ def listen_from_server():
             HEADER_FORMAT, header)
         frame_data = data[HEADER_SIZE:]
 
-        if frame_number != 0:
-            append_package(frame_number, sequence_number, frame_data)
-        else:
-            read_video_config(frame_data)
+        append_package(frame_number, sequence_number, frame_data)
 
         add_log(
             f"[PACKAGE INFO]: frame: {frame_number} - sequence: {sequence_number} - size: {payload_size}")

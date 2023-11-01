@@ -58,16 +58,13 @@ def handle_client(data: bytes, address):
         return
 
     video_capture = cv2.VideoCapture(MEDIA_PATH)
-    frame_width = int(video_capture.get(cv2.CAP_PROP_FRAME_WIDTH))
-    frame_height = int(video_capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    config_packet = build_video_config(frame_width, frame_height)
-    server.sendto(config_packet, address)
-
     ret, frame = video_capture.read()
-    frame_number = 1
+    frame_number = 0
 
     while ret:
-        frame_data = frame.tobytes()
+        retval, compressed_frame = cv2.imencode(".jpg", frame)
+        frame_data = compressed_frame.tobytes()
+
         chunks = [frame_data[i:i + MAX_PAYLOAD_SIZE]
                   for i in range(0, len(frame_data), MAX_PAYLOAD_SIZE)]
 
