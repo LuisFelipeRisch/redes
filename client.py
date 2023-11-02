@@ -4,6 +4,7 @@ import socket
 import struct
 import cv2
 import numpy
+import threading
 
 
 class PacketDict(TypedDict):
@@ -21,23 +22,27 @@ class FrameDict(TypedDict):
     data: PacketData
 
 
-# FramesDict =
-
 SERVER = socket.gethostbyname(socket.gethostname())
 PORT = 3030
 ADDRESS = (SERVER, PORT)
-HEADER_FORMAT = "!IIH"
+HEADER_FORMAT = "!IIHH"
 CONFIG_FORMAT = "!II"
-MAX_PAYLOAD_SIZE = 60000
+MAX_PAYLOAD_SIZE = 1480
 HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
 MAX_PACKAGE_SIZE = HEADER_SIZE + MAX_PAYLOAD_SIZE
 START_MESSAGE = '!start'
+BUFFER_SIZE = 3600
 
 client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 client.connect(ADDRESS)
 
-# frames_buffer: = []
+buffer_count = 0
+buffer_init = {'index': 0, 'frame': 0}
+buffer_end = {'index': -1, 'frame': 0}
+buffer = [None] * BUFFER_SIZE
 frames: Dict[str, FrameDict] = {}
+
+video_fps = 0
 
 
 def get_timestamp():
@@ -54,6 +59,19 @@ def start_communication():
     client.sendto(START_MESSAGE.encode('utf-8'), ADDRESS)
 
 
+def play_buffer():
+    global buffer_count
+    while True:
+        add_log(f"BUFFER COUNT: {buffer_count}")
+        if (buffer_count > 0):
+            frame_data = buffer[buffer_init['index']]
+            if (frame_data != None):
+                play_frame(frame_data)
+                buffer[buffer_init['index']] = None
+                buffer_count -= 1
+            buffer_init['index'] = (buffer_init['index'] + 1) % BUFFER_SIZE
+
+
 def play_frame(frame_data: bytes):
     frame = numpy.frombuffer(frame_data, dtype=numpy.uint8)
     frame = frame.reshape(frame.shape[0], 1)
@@ -62,16 +80,33 @@ def play_frame(frame_data: bytes):
     cv2.waitKey(25)
 
 
-def mount_full_frame(total: int, data: PacketData):
+def mount_full_frame(frame_number: int, total: int, data: PacketData):
+    global buffer_count
     bytes = b""
 
     for i in range(total):
         data_bytes = data[f"{i + 1}"]['data']
-        add_log(f'INDEX: {i+1} - LENGTH: {len(data_bytes)}')
         bytes += data_bytes
 
-    add_log(f"BYTES LENGTH: {len(bytes)}")
-    play_frame(bytes)
+    offset = frame_number - buffer_end['frame']
+
+    if buffer_end['index'] == -1:
+        buffer_index = 0
+    else:
+        buffer_index = buffer_end['index'] + offset
+        if (buffer_end['index'] == 0 and offset < 0) or (buffer_end['index'] == BUFFER_SIZE - 1 and offset > 0):
+            buffer_index = abs(BUFFER_SIZE - buffer_index)
+
+    print(f"BUFFER INDEX: {buffer_index}")
+    print(f"BUFFER END INDEX: {buffer_end['index']}")
+    print(f"OFFSET: {offset}")
+
+    if offset > 0 or buffer_end['index'] == -1:
+        buffer_end['index'] = buffer_index
+        buffer_end['frame'] = frame_number
+
+    buffer[buffer_index] = bytes
+    buffer_count += 1
 
 
 def append_package(frame_number: int, sequence_number: int, frame_data: bytes):
@@ -91,7 +126,7 @@ def append_package(frame_number: int, sequence_number: int, frame_data: bytes):
         frame = frames[frame_key]
 
         if sequence_number == 0:
-            total = int.from_bytes(frame_data, 'big')
+            total = int.from_bytes(frame_data, 'mount_full_framebig')
             frame['total'] = total
         else:
             frame['received'] += 1
@@ -99,22 +134,28 @@ def append_package(frame_number: int, sequence_number: int, frame_data: bytes):
                 'id': sequence_number, 'data': frame_data}
 
             if ('received' in frame) and ('total' in frame):
-                add_log(
-                    f"TOTAL: {frame['total']} - RECEIVED: {frame['received']}")
                 if frame['received'] == frame['total']:
                     add_log(f"FULL FRAME {frame_number}")
-                    mount_full_frame(frame['total'], frame['data'])
+                    mount_full_frame(
+                        frame_number, frame['total'], frame['data'])
+
+
+def start_player():
+    thread = threading.Thread(target=play_buffer)
+    thread.start()
 
 
 def listen_from_server():
+    global video_fps
+
     add_log("Listening to server...")
 
     while True:
         data, address = client.recvfrom(MAX_PACKAGE_SIZE)
-        # add_log(f"Received a package from {address}")
+        add_log(f"Received a package from {address}")
 
         header = data[:HEADER_SIZE]
-        frame_number, sequence_number, payload_size = struct.unpack(
+        frame_number, sequence_number, video_fps, payload_size = struct.unpack(
             HEADER_FORMAT, header)
         frame_data = data[HEADER_SIZE:]
 
@@ -125,4 +166,5 @@ def listen_from_server():
 
 
 start_communication()
+start_player()
 listen_from_server()

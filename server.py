@@ -3,20 +3,22 @@ import socket
 import threading
 import cv2
 import struct
+import time
 
 SERVER = socket.gethostbyname(socket.gethostname())
 PORT = 3030
 ADDRESS = (SERVER, PORT)
 MEDIA_PATH = "drone-video.mp4"
-MAX_PAYLOAD_SIZE = 60000
-HEADER_FORMAT = "!IIH"
+MAX_PAYLOAD_SIZE = 1480
+HEADER_FORMAT = "!IIHH"
 HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
-CONFIG_FORMAT = "!II"
 MAX_PACKAGE_SIZE = HEADER_SIZE + MAX_PAYLOAD_SIZE
 START_MESSAGE = '!start'
 
 server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 server.bind(ADDRESS)
+
+video_fps = 0
 
 
 def get_timestamp():
@@ -28,28 +30,18 @@ def add_log(message: str):
     print(f"[{get_timestamp()}]: {message}")
 
 
-def get_video_length(video) -> float:
-    fps = int(video.get(cv2.CAP_PROP_FPS))
-    frame_count = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
-    return frame_count / fps
-
-
 def build_packet(frame_number: int, sequence_number: int, payload: bytes) -> bytes:
     # Build the package header
     header = struct.pack(HEADER_FORMAT, frame_number,
-                         sequence_number, len(payload))
+                         sequence_number, video_fps, len(payload))
     # Prepend the header to the payload
     packet = header + payload
     return packet
 
 
-def build_video_config(width: int, height: int) -> bytes:
-    data = struct.pack(CONFIG_FORMAT, width, height)
-    packet = build_packet(0, 0, data)
-    return packet
-
-
 def handle_client(data: bytes, address):
+    global video_fps
+
     decoded_data = data.decode("utf-8")
     add_log(
         f"New connection from {address} with message: {decoded_data}.")
@@ -58,6 +50,7 @@ def handle_client(data: bytes, address):
         return
 
     video_capture = cv2.VideoCapture(MEDIA_PATH)
+    video_fps = int(video_capture.get(cv2.CAP_PROP_FPS))
     ret, frame = video_capture.read()
     frame_number = 0
 
