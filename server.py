@@ -4,11 +4,12 @@ import threading
 import cv2
 import struct
 import time
+import argparse
 
 SERVER = socket.gethostbyname(socket.gethostname())
 PORT = 3030
 ADDRESS = (SERVER, PORT)
-MEDIA_PATH = "drone-video.mp4"
+MEDIA_PATH = "video.mp4"
 MAX_PAYLOAD_SIZE = 1480
 HEADER_FORMAT = "!IIHH"
 HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
@@ -19,6 +20,7 @@ server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 server.bind(ADDRESS)
 
 video_fps = 0
+delay = 0.5
 
 
 def get_timestamp():
@@ -37,6 +39,10 @@ def build_packet(frame_number: int, sequence_number: int, payload: bytes) -> byt
     # Prepend the header to the payload
     packet = header + payload
     return packet
+
+def send_packet(packet, address):
+    time.sleep(delay / 1000)
+    server.sendto(packet, address)
 
 
 def handle_client(data: bytes, address):
@@ -64,7 +70,7 @@ def handle_client(data: bytes, address):
         sequence_number = 0
         initial_packet = build_packet(
             frame_number, sequence_number, len(chunks).to_bytes(4, 'big'))
-        server.sendto(initial_packet, address)
+        send_packet(initial_packet, address)
 
         sequence_number += 1
 
@@ -74,7 +80,7 @@ def handle_client(data: bytes, address):
             add_log(f"Sending package to {address}")
             add_log(
                 f"[PACKAGE INFO]: frame: {frame_number} - sequence: {sequence_number} - size: {len(chunk)}")
-            server.sendto(packet, address)
+            send_packet(packet, address)
 
             sequence_number += 1
 
@@ -100,5 +106,17 @@ def main():
     server.close()
     add_log("Server closed")
 
+
+parser = argparse.ArgumentParser(
+    prog='Server',
+    description='Server that sends media to clients'
+)
+
+parser.add_argument('-d', '--delay', type=float, help='Defines a time interval, in milliseconds, for sending packets')
+
+args = parser.parse_args()
+
+if args.delay != None:
+    delay = args.delay
 
 main()
