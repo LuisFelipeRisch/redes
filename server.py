@@ -5,6 +5,7 @@ import cv2
 import struct
 import time
 import argparse
+import uuid
 
 SERVER = socket.gethostbyname(socket.gethostname())
 PORT = 3030
@@ -15,13 +16,14 @@ HEADER_FORMAT = "!IIHH"
 HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
 MAX_PACKAGE_SIZE = HEADER_SIZE + MAX_PAYLOAD_SIZE
 START_MESSAGE = '!start'
+SUBSCRIBED_MESSAGE = '!subscribed'
 
 server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 server.bind(ADDRESS)
 
 video_fps = 0
 delay = 0.5
-
+clients_address = []
 
 def get_timestamp():
     timestamp = datetime.now()
@@ -44,16 +46,59 @@ def send_packet(packet, address):
     time.sleep(delay / 1000)
     server.sendto(packet, address)
 
+def client_already_subscribed(address):
+    for client_address in clients_address:
+        if client_address == address:
+            return True
 
-def handle_client(data: bytes, address):
+    return False
+
+def encode_message(message):
+    return message.encode('utf-8')
+
+def listen_to_subscribes():
+    add_log("Thread started. Listening to subscribes.")
+
+    while True:
+        data, address = server.recvfrom(MAX_PACKAGE_SIZE)
+        decoded_data = data.decode('utf-8')
+
+        if decoded_data != START_MESSAGE:
+            add_log(f"{decoded_data} unknown start message!")
+            continue
+
+        if client_already_subscribed(address):
+            add_log(f"{address} already connected!")
+            continue
+
+        clients_address.append(address)
+
+        add_log(f"New client({address}) connected. Now, we have {len(clients_address)} active clients.")
+
+        encoded_subscribed_message = encode_message(SUBSCRIBED_MESSAGE)
+
+        packet = build_packet(0, 0, encoded_subscribed_message)
+
+        send_packet(packet, address)
+
+
+def start_thread_to_listen_subscribes():
+    add_log("Starting thread to listen subscribes...")
+
+    thread = threading.Thread(target=listen_to_subscribes)
+    thread.start()
+
+def empty_clients():
+    return len(clients_address) == 0
+
+def send_packet_to_clients(frame_number, sequence_number, payload):
+    for client_address in clients_address:
+        packet = build_packet(frame_number, sequence_number, payload)
+
+        send_packet(packet, client_address)
+
+def handle_client():
     global video_fps
-
-    decoded_data = data.decode("utf-8")
-    add_log(
-        f"New connection from {address} with message: {decoded_data}.")
-    if decoded_data != START_MESSAGE:
-        add_log(f"Unknown message from {address}")
-        return
 
     video_capture = cv2.VideoCapture(MEDIA_PATH)
     video_fps = int(video_capture.get(cv2.CAP_PROP_FPS))
@@ -67,45 +112,37 @@ def handle_client(data: bytes, address):
         chunks = [frame_data[i:i + MAX_PAYLOAD_SIZE]
                   for i in range(0, len(frame_data), MAX_PAYLOAD_SIZE)]
 
+
         sequence_number = 0
-        initial_packet = build_packet(
-            frame_number, sequence_number, len(chunks).to_bytes(4, 'big'))
-        send_packet(initial_packet, address)
+
+        send_packet_to_clients(frame_number, sequence_number, len(chunks).to_bytes(4, 'big'))
 
         sequence_number += 1
 
         for chunk in chunks:
-            packet = build_packet(frame_number, sequence_number, chunk)
-
-            add_log(f"Sending package to {address}")
+            # add_log(f"Sending package to {address}")
             add_log(
                 f"[PACKAGE INFO]: frame: {frame_number} - sequence: {sequence_number} - size: {len(chunk)}")
-            send_packet(packet, address)
+            send_packet_to_clients(frame_number, sequence_number, chunk)
 
             sequence_number += 1
 
         ret, frame = video_capture.read()
         frame_number += 1
 
-
-def start_server():
-    add_log(f"Server is listening on {SERVER}:{PORT}")
+def send_media_to_clients():
     while True:
-        data, address = server.recvfrom(MAX_PACKAGE_SIZE)
-        thread = threading.Thread(
-            target=handle_client, args=(data, address)
-        )
-        thread.start()
-        add_log(f"{threading.active_count() - 1} active communication.")
+        if empty_clients(): continue
 
+        handle_client()
 
 def main():
-    add_log("Starting server...")
-    start_server()
-    add_log("Closing server...")
-    server.close()
-    add_log("Server closed")
+    add_log(f"Server is listening on {SERVER}:{PORT}")
 
+    thread = threading.Thread(target=send_media_to_clients)
+    thread.start()
+
+    listen_to_subscribes()
 
 parser = argparse.ArgumentParser(
     prog='Server',
@@ -119,4 +156,8 @@ args = parser.parse_args()
 if args.delay != None:
     delay = args.delay
 
-main()
+try:
+    main()
+finally:
+    pass
+    # server.close()
