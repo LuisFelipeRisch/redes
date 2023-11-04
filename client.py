@@ -31,10 +31,10 @@ CONFIG_FORMAT = "!II"
 MAX_PAYLOAD_SIZE = 65000
 HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
 MAX_PACKAGE_SIZE = HEADER_SIZE + MAX_PAYLOAD_SIZE
-START_MESSAGE = '!start'
 BUFFER_SIZE = 3600
 CONFIRMATION_TIMEOUT = 5
-SUBSCRIBED_MESSAGE = '!subscribed'
+SUBSCRIBE_MESSAGE = '!subscribe'
+UNSUBSCRIBE_MESSAGE = '!unsubscribe'
 
 buffer_count = 0
 buffer_init = {'index': 0, 'frame': 0}
@@ -58,9 +58,15 @@ def add_log(message: str):
     print(f"[{get_timestamp()}]: {message}")
 
 
-def start_communication():
+def unsubscribe():
     add_log("Subscribing to server...")
-    client.sendto(START_MESSAGE.encode('utf-8'), (server_ip, server_port))
+    client.sendto(UNSUBSCRIBE_MESSAGE.encode(
+        'utf-8'), (server_ip, server_port))
+
+
+def subscribe():
+    add_log("Subscribing to server...")
+    client.sendto(SUBSCRIBE_MESSAGE.encode('utf-8'), (server_ip, server_port))
 
 
 def play_buffer():
@@ -82,7 +88,11 @@ def play_frame(frame_data: bytes):
     npdata = np.fromstring(decoded_data, dtype=np.uint8)
     frame = cv2.imdecode(npdata, 1)
     cv2.imshow('Video', frame)
-    cv2.waitKey(1) & 0xFF
+    key = cv2.waitKey(1) & 0xFF
+    if key == ord('q'):
+        unsubscribe()
+        client.close()
+        os._exit(1)
 
 
 def mount_full_frame(frame_number: int, total: int, data: PacketData):
@@ -205,7 +215,7 @@ def main():
         handle_args()
 
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        start_communication()
+        subscribe()
 
         start_player()
         listen_from_server()

@@ -17,8 +17,8 @@ MAX_PAYLOAD_SIZE = 65000
 HEADER_FORMAT = "!IIHH"
 HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
 MAX_PACKAGE_SIZE = HEADER_SIZE + MAX_PAYLOAD_SIZE
-START_MESSAGE = '!start'
-SUBSCRIBED_MESSAGE = '!subscribed'
+SUBSCRIBE_MESSAGE = '!subscribe'
+UNSUBSCRIBE_MESSAGE = '!unsubscribe'
 VIDEO_WIDTH = 400
 
 server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -63,25 +63,29 @@ def client_already_subscribed(address):
     return False
 
 
-def listen_to_subscriptions():
+def listen_clients():
     add_log(f"Server is listening for subscriptions on {SERVER}:{PORT}")
 
     while True:
         data, address = server.recvfrom(MAX_PACKAGE_SIZE)
         decoded_data = data.decode('utf-8')
 
-        if decoded_data != START_MESSAGE:
+        if decoded_data == SUBSCRIBE_MESSAGE:
+            if client_already_subscribed(address):
+                add_log(f"Client {address} is already subscribed.")
+            else:
+                clients_address.append(address)
+                add_log(
+                    f"New client {address} subscribed. {len(clients_address)} active clients.")
+        elif decoded_data == UNSUBSCRIBE_MESSAGE:
+            if client_already_subscribed(address):
+                clients_address.remove(address)
+                add_log(
+                    f"Client {address} unsubscribed. {len(clients_address)} active clients.")
+            else:
+                add_log(f"Client {address} is not subscribed.")
+        else:
             add_log(f"{decoded_data} unknown start message!")
-            continue
-
-        if client_already_subscribed(address):
-            add_log(f"{address} already subscribed.")
-            continue
-
-        clients_address.append(address)
-
-        add_log(
-            f"New client {address} subscribed. {len(clients_address)} active clients.")
 
 
 def send_packet_to_clients(frame_number, sequence_number, payload):
@@ -111,7 +115,7 @@ def handle_client():
 
     frame_number = 0
 
-    while True:
+    while len(clients_address) > 0:
         frame = frame_queue.get()
         retval, raw_frame = cv2.imencode(
             ".jpeg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
@@ -187,7 +191,7 @@ def main():
     thread = threading.Thread(target=send_media_to_clients)
     thread.start()
 
-    listen_to_subscriptions()
+    listen_clients()
 
 
 try:
