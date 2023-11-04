@@ -76,19 +76,6 @@ def listen_to_subscriptions():
         add_log(
             f"New client {address} subscribed. {len(clients_address)} active clients.")
 
-        encoded_subscribed_message = SUBSCRIBED_MESSAGE.encode('utf-8')
-
-        packet = build_packet(0, 0, 0, encoded_subscribed_message)
-
-        send_packet(packet, address)
-
-
-def start_thread_to_listen_subscribes():
-    add_log("Starting thread to listen subscribes...")
-
-    thread = threading.Thread(target=listen_to_subscriptions)
-    thread.start()
-
 
 def send_packet_to_clients(frame_number, sequence_number, payload):
     for client_address in clients_address:
@@ -96,6 +83,7 @@ def send_packet_to_clients(frame_number, sequence_number, payload):
             frame_number, sequence_number, video_fps, payload)
 
         send_packet(packet, client_address)
+
 
 
 def handle_client():
@@ -153,19 +141,19 @@ def handle_args():
     if args.delay != None:
         delay = args.delay
 
+def start_thread_to_send_media():
+    thread = threading.Thread(target=send_media_to_clients)
+    thread.start()
 
 def main():
     add_log(f"Server is listening on {SERVER}:{PORT}")
 
-    handle_args()
-
-    thread = threading.Thread(target=send_media_to_clients)
-    thread.start()
-
     listen_to_subscriptions()
 
-
+    start_thread_to_send_media()
 try:
+    handle_args()
+
     main()
 finally:
     pass

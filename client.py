@@ -33,8 +33,6 @@ HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
 MAX_PACKAGE_SIZE = HEADER_SIZE + MAX_PAYLOAD_SIZE
 START_MESSAGE = '!start'
 BUFFER_SIZE = 3600
-CONFIRMATION_TIMEOUT = 5
-SUBSCRIBED_MESSAGE = '!subscribed'
 
 client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 client.connect(ADDRESS)
@@ -155,37 +153,16 @@ def unpack_packet(packet):
     return frame_number, sequence_number, fps, payload_size, frame_data
 
 
-def subscribed():
-    subscribed = False
-    start_time = time.time()
-
-    while (not subscribed) and True:
-        packet, _ = client.recvfrom(MAX_PACKAGE_SIZE)
-
-        key_one, key_two, key_three, _, data = unpack_packet(packet)
-
-        if key_one == 0 and key_two == 0 and key_three == 0:
-            decoded_data = data.decode('utf-8')
-
-            if decoded_data == SUBSCRIBED_MESSAGE:
-                subscribed = True
-
-        if time.time() - start_time >= CONFIRMATION_TIMEOUT:
-            break
-
-    return subscribed
-
-
 def listen_from_server():
     global video_fps
 
     add_log("Listening to server...")
 
     while True:
-        packet, address = client.recvfrom(MAX_PACKAGE_SIZE)
+        packet, _ = client.recvfrom(MAX_PACKAGE_SIZE)
         # add_log(f"Received a package from {address}")
 
-        frame_number, sequence_number, video_fps, payload_size, frame_data = unpack_packet(
+        frame_number, sequence_number, video_fps, _, frame_data = unpack_packet(
             packet)
 
         append_package(frame_number, sequence_number, frame_data)
@@ -199,9 +176,5 @@ try:
 
     start_player()
     listen_from_server()
-    # if subscribed():
-    #     add_log("Client is now subscribed")
-    # else:
-    #     add_log("No subscription response from server")
 finally:
     client.close()
