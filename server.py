@@ -30,6 +30,7 @@ clients_address = []
 frame_queue = queue.Queue(maxsize=10)
 
 media_path = ""
+video_capture = None
 
 
 def get_timestamp():
@@ -82,6 +83,9 @@ def listen_clients():
                 clients_address.remove(address)
                 add_log(
                     f"Client {address} unsubscribed. {len(clients_address)} active clients.")
+                if (len(clients_address) == 0):
+                    rewind_video()
+                    add_log("No clients connected. The video was rewinded.")
             else:
                 add_log(f"Client {address} is not subscribed.")
         else:
@@ -95,8 +99,12 @@ def send_packet_to_clients(frame_number, sequence_number, payload):
         send_packet(packet, client_address)
 
 
+def rewind_video():
+    video_capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
+
+
 def read_video():
-    global video_fps
+    global video_fps, video_capture
     video_capture = cv2.VideoCapture(media_path)
     video_fps = int(video_capture.get(cv2.CAP_PROP_FPS))
     while (video_capture.isOpened()):
