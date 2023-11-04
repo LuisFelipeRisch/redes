@@ -3,9 +3,10 @@ from typing import List, Dict, TypedDict
 import socket
 import struct
 import cv2
-import numpy
+import numpy as np
 import threading
 import time
+import base64
 
 
 class PacketDict(TypedDict):
@@ -28,7 +29,7 @@ PORT = 3030
 ADDRESS = (SERVER, PORT)
 HEADER_FORMAT = "!IIHH"
 CONFIG_FORMAT = "!II"
-MAX_PAYLOAD_SIZE = 1480
+MAX_PAYLOAD_SIZE = 65000
 HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
 MAX_PACKAGE_SIZE = HEADER_SIZE + MAX_PAYLOAD_SIZE
 START_MESSAGE = '!start'
@@ -66,10 +67,10 @@ def play_buffer():
     global buffer_count
     cv2.namedWindow('Video', cv2.WINDOW_NORMAL)
     while True:
-        # add_log(f"BUFFER LENGTH: {buffer_count}")
         if (buffer_count > 0):
             frame_data = buffer[buffer_init['index']]
             if (frame_data != None):
+                time.sleep(1/video_fps)
                 play_frame(frame_data)
                 buffer[buffer_init['index']] = None
                 buffer_count -= 1
@@ -77,11 +78,11 @@ def play_buffer():
 
 
 def play_frame(frame_data: bytes):
-    frame = numpy.frombuffer(frame_data, dtype=numpy.uint8)
-    frame = frame.reshape(frame.shape[0], 1)
-    frame = cv2.imdecode(frame, cv2.IMREAD_COLOR)
+    decoded_data = base64.b64decode(frame_data, ' /')
+    npdata = np.fromstring(decoded_data, dtype=np.uint8)
+    frame = cv2.imdecode(npdata, 1)
     cv2.imshow('Video', frame)
-    cv2.waitKey(25)
+    cv2.waitKey(1) & 0xFF
 
 
 def mount_full_frame(frame_number: int, total: int, data: PacketData):
@@ -155,27 +156,6 @@ def unpack_packet(packet):
     return frame_number, sequence_number, fps, payload_size, frame_data
 
 
-def subscribed():
-    subscribed = False
-    start_time = time.time()
-
-    while (not subscribed) and True:
-        packet, _ = client.recvfrom(MAX_PACKAGE_SIZE)
-
-        key_one, key_two, key_three, _, data = unpack_packet(packet)
-
-        if key_one == 0 and key_two == 0 and key_three == 0:
-            decoded_data = data.decode('utf-8')
-
-            if decoded_data == SUBSCRIBED_MESSAGE:
-                subscribed = True
-
-        if time.time() - start_time >= CONFIRMATION_TIMEOUT:
-            break
-
-    return subscribed
-
-
 def listen_from_server():
     global video_fps
 
@@ -199,9 +179,5 @@ try:
 
     start_player()
     listen_from_server()
-    # if subscribed():
-    #     add_log("Client is now subscribed")
-    # else:
-    #     add_log("No subscription response from server")
 finally:
     client.close()

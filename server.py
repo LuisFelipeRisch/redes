@@ -5,17 +5,22 @@ import cv2
 import struct
 import time
 import argparse
+import base64
+import imutils
+import queue
+import os
 
 SERVER = socket.gethostbyname(socket.gethostname())
 PORT = 3030
 ADDRESS = (SERVER, PORT)
 MEDIA_PATH = "video.mp4"
-MAX_PAYLOAD_SIZE = 1480
+MAX_PAYLOAD_SIZE = 65000
 HEADER_FORMAT = "!IIHH"
 HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
 MAX_PACKAGE_SIZE = HEADER_SIZE + MAX_PAYLOAD_SIZE
 START_MESSAGE = '!start'
 SUBSCRIBED_MESSAGE = '!subscribed'
+VIDEO_WIDTH = 400
 
 server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 server.bind(ADDRESS)
@@ -23,6 +28,7 @@ server.bind(ADDRESS)
 video_fps = 0
 delay = 0
 clients_address = []
+frame_queue = queue.Queue(maxsize=10)
 
 
 def get_timestamp():
@@ -76,39 +82,39 @@ def listen_to_subscriptions():
         add_log(
             f"New client {address} subscribed. {len(clients_address)} active clients.")
 
-        encoded_subscribed_message = SUBSCRIBED_MESSAGE.encode('utf-8')
-
-        packet = build_packet(0, 0, 0, encoded_subscribed_message)
-
-        send_packet(packet, address)
-
-
-def start_thread_to_listen_subscribes():
-    add_log("Starting thread to listen subscribes...")
-
-    thread = threading.Thread(target=listen_to_subscriptions)
-    thread.start()
-
 
 def send_packet_to_clients(frame_number, sequence_number, payload):
+    packet = build_packet(
+        frame_number, sequence_number, video_fps, payload)
     for client_address in clients_address:
-        packet = build_packet(
-            frame_number, sequence_number, video_fps, payload)
-
         send_packet(packet, client_address)
+
+
+def read_video():
+    global video_fps
+    video_capture = cv2.VideoCapture(MEDIA_PATH)
+    video_fps = int(video_capture.get(cv2.CAP_PROP_FPS))
+    while (video_capture.isOpened()):
+        try:
+            _, frame = video_capture.read()
+            frame = imutils.resize(frame, width=VIDEO_WIDTH)
+            frame_queue.put(frame)
+        except:
+            os._exit(1)
+    add_log('Player closed')
+    video_capture.release()
 
 
 def handle_client():
     global video_fps
 
-    video_capture = cv2.VideoCapture(MEDIA_PATH)
-    video_fps = int(video_capture.get(cv2.CAP_PROP_FPS))
-    ret, frame = video_capture.read()
     frame_number = 0
 
-    while ret:
-        retval, compressed_frame = cv2.imencode(".jpg", frame)
-        frame_data = compressed_frame.tobytes()
+    while True:
+        frame = frame_queue.get()
+        retval, raw_frame = cv2.imencode(
+            ".jpeg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        frame_data = base64.b64encode(raw_frame)
 
         chunks = [frame_data[i:i + MAX_PAYLOAD_SIZE]
                   for i in range(0, len(frame_data), MAX_PAYLOAD_SIZE)]
@@ -121,14 +127,12 @@ def handle_client():
         sequence_number += 1
 
         for chunk in chunks:
-            # add_log(f"Sending package to {address}")
             add_log(
                 f"[PACKAGE INFO]: frame: {frame_number} - sequence: {sequence_number} - size: {len(chunk)}")
             send_packet_to_clients(frame_number, sequence_number, chunk)
 
             sequence_number += 1
 
-        ret, frame = video_capture.read()
         frame_number += 1
 
 
@@ -158,6 +162,9 @@ def main():
     add_log(f"Server is listening on {SERVER}:{PORT}")
 
     handle_args()
+
+    video_thread = threading.Thread(target=read_video)
+    video_thread.start()
 
     thread = threading.Thread(target=send_media_to_clients)
     thread.start()
