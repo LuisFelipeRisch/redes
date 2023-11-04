@@ -7,6 +7,8 @@ import numpy as np
 import threading
 import time
 import base64
+import argparse
+import os
 
 
 class PacketDict(TypedDict):
@@ -24,9 +26,6 @@ class FrameDict(TypedDict):
     data: PacketData
 
 
-SERVER = socket.gethostbyname(socket.gethostname())
-PORT = 3030
-ADDRESS = (SERVER, PORT)
 HEADER_FORMAT = "!IIHH"
 CONFIG_FORMAT = "!II"
 MAX_PAYLOAD_SIZE = 65000
@@ -37,9 +36,6 @@ BUFFER_SIZE = 3600
 CONFIRMATION_TIMEOUT = 5
 SUBSCRIBED_MESSAGE = '!subscribed'
 
-client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-client.connect(ADDRESS)
-
 buffer_count = 0
 buffer_init = {'index': 0, 'frame': 0}
 buffer_end = {'index': -1, 'frame': 0}
@@ -47,6 +43,10 @@ buffer = [None] * BUFFER_SIZE
 frames: Dict[str, FrameDict] = {}
 
 video_fps = 0
+
+server_ip = ""
+server_port = ""
+client = None
 
 
 def get_timestamp():
@@ -60,7 +60,7 @@ def add_log(message: str):
 
 def start_communication():
     add_log("Subscribing to server...")
-    client.sendto(START_MESSAGE.encode('utf-8'), ADDRESS)
+    client.sendto(START_MESSAGE.encode('utf-8'), (server_ip, server_port))
 
 
 def play_buffer():
@@ -163,21 +163,54 @@ def listen_from_server():
 
     while True:
         packet, address = client.recvfrom(MAX_PACKAGE_SIZE)
-        # add_log(f"Received a package from {address}")
+        add_log(f"Received a package from {address}")
 
         frame_number, sequence_number, video_fps, payload_size, frame_data = unpack_packet(
             packet)
 
         append_package(frame_number, sequence_number, frame_data)
 
-        # add_log(
-        #     f"[PACKAGE INFO]: frame: {frame_number} - sequence: {sequence_number} - size: {payload_size}")
+        add_log(
+            f"[PACKAGE INFO]: frame: {frame_number} - sequence: {sequence_number} - size: {payload_size}")
 
 
-try:
-    start_communication()
+def handle_args():
+    global server_ip, server_port
 
-    start_player()
-    listen_from_server()
-finally:
-    client.close()
+    parser = argparse.ArgumentParser(
+        prog='Client',
+        description='Client that receives media from server'
+    )
+
+    parser.add_argument('-ip', '--server-ip', type=str,
+                        help='Defines the server ip.')
+
+    parser.add_argument('-p', '--server-port', type=int,
+                        help='Defines the server port.')
+
+    args = parser.parse_args()
+
+    if args.server_ip == None or args.server_port == None:
+        print(
+            "Server ip and port must be passed as arguments. Please, use -h option to get help.")
+        os._exit(1)
+
+    server_ip = args.server_ip
+    server_port = args.server_port
+
+
+def main():
+    global client
+    try:
+        handle_args()
+
+        client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        start_communication()
+
+        start_player()
+        listen_from_server()
+    finally:
+        client.close()
+
+
+main()

@@ -13,7 +13,6 @@ import os
 SERVER = socket.gethostbyname(socket.gethostname())
 PORT = 3030
 ADDRESS = (SERVER, PORT)
-MEDIA_PATH = "video.mp4"
 MAX_PAYLOAD_SIZE = 65000
 HEADER_FORMAT = "!IIHH"
 HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
@@ -29,6 +28,8 @@ video_fps = 0
 delay = 0
 clients_address = []
 frame_queue = queue.Queue(maxsize=10)
+
+media_path = ""
 
 
 def get_timestamp():
@@ -63,7 +64,7 @@ def client_already_subscribed(address):
 
 
 def listen_to_subscriptions():
-    add_log("Server is listening for subscriptions...")
+    add_log(f"Server is listening for subscriptions on {SERVER}:{PORT}")
 
     while True:
         data, address = server.recvfrom(MAX_PACKAGE_SIZE)
@@ -92,7 +93,7 @@ def send_packet_to_clients(frame_number, sequence_number, payload):
 
 def read_video():
     global video_fps
-    video_capture = cv2.VideoCapture(MEDIA_PATH)
+    video_capture = cv2.VideoCapture(media_path)
     video_fps = int(video_capture.get(cv2.CAP_PROP_FPS))
     while (video_capture.isOpened()):
         try:
@@ -142,8 +143,15 @@ def send_media_to_clients():
             handle_client()
 
 
+def check_file_existence(file_path):
+    if not os.path.exists(file_path):
+        print(f"File {file_path} not found.")
+        os._exit(1)
+
+
 def handle_args():
-    global delay
+    global delay, media_path
+
     parser = argparse.ArgumentParser(
         prog='Server',
         description='Server that sends media to clients'
@@ -152,16 +160,26 @@ def handle_args():
     parser.add_argument('-d', '--delay', type=float,
                         help='Defines a time interval, in milliseconds, for sending packets')
 
+    parser.add_argument('-m', '--media-path', type=str,
+                        help='Defines the path to the media. Must be a video file (.mp4)')
+
     args = parser.parse_args()
+
+    if args.media_path == None:
+        print("The path to the media must be provided. Use -h option to get help")
+        os._exit(1)
+
+    media_path = args.media_path
 
     if args.delay != None:
         delay = args.delay
 
 
 def main():
-    add_log(f"Server is listening on {SERVER}:{PORT}")
 
     handle_args()
+
+    check_file_existence(media_path)
 
     video_thread = threading.Thread(target=read_video)
     video_thread.start()
