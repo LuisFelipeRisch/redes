@@ -5,7 +5,6 @@ import cv2
 import struct
 import time
 import argparse
-import uuid
 
 SERVER = socket.gethostbyname(socket.gethostname())
 PORT = 3030
@@ -22,8 +21,9 @@ server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 server.bind(ADDRESS)
 
 video_fps = 0
-delay = 0.5
+delay = 0
 clients_address = []
+
 
 def get_timestamp():
     timestamp = datetime.now()
@@ -34,7 +34,7 @@ def add_log(message: str):
     print(f"[{get_timestamp()}]: {message}")
 
 
-def build_packet(frame_number: int, sequence_number: int, payload: bytes) -> bytes:
+def build_packet(frame_number: int, sequence_number: int, video_fps: int, payload: bytes) -> bytes:
     # Build the package header
     header = struct.pack(HEADER_FORMAT, frame_number,
                          sequence_number, video_fps, len(payload))
@@ -42,9 +42,11 @@ def build_packet(frame_number: int, sequence_number: int, payload: bytes) -> byt
     packet = header + payload
     return packet
 
+
 def send_packet(packet, address):
     time.sleep(delay / 1000)
     server.sendto(packet, address)
+
 
 def client_already_subscribed(address):
     for client_address in clients_address:
@@ -53,11 +55,9 @@ def client_already_subscribed(address):
 
     return False
 
-def encode_message(message):
-    return message.encode('utf-8')
 
-def listen_to_subscribes():
-    add_log("Thread started. Listening to subscribes.")
+def listen_to_subscriptions():
+    add_log("Server is listening for subscriptions...")
 
     while True:
         data, address = server.recvfrom(MAX_PACKAGE_SIZE)
@@ -68,16 +68,17 @@ def listen_to_subscribes():
             continue
 
         if client_already_subscribed(address):
-            add_log(f"{address} already connected!")
+            add_log(f"{address} already subscribed.")
             continue
 
         clients_address.append(address)
 
-        add_log(f"New client({address}) connected. Now, we have {len(clients_address)} active clients.")
+        add_log(
+            f"New client {address} subscribed. {len(clients_address)} active clients.")
 
-        encoded_subscribed_message = encode_message(SUBSCRIBED_MESSAGE)
+        encoded_subscribed_message = SUBSCRIBED_MESSAGE.encode('utf-8')
 
-        packet = build_packet(0, 0, encoded_subscribed_message)
+        packet = build_packet(0, 0, 0, encoded_subscribed_message)
 
         send_packet(packet, address)
 
@@ -85,17 +86,17 @@ def listen_to_subscribes():
 def start_thread_to_listen_subscribes():
     add_log("Starting thread to listen subscribes...")
 
-    thread = threading.Thread(target=listen_to_subscribes)
+    thread = threading.Thread(target=listen_to_subscriptions)
     thread.start()
 
-def empty_clients():
-    return len(clients_address) == 0
 
 def send_packet_to_clients(frame_number, sequence_number, payload):
     for client_address in clients_address:
-        packet = build_packet(frame_number, sequence_number, payload)
+        packet = build_packet(
+            frame_number, sequence_number, video_fps, payload)
 
         send_packet(packet, client_address)
+
 
 def handle_client():
     global video_fps
@@ -112,10 +113,10 @@ def handle_client():
         chunks = [frame_data[i:i + MAX_PAYLOAD_SIZE]
                   for i in range(0, len(frame_data), MAX_PAYLOAD_SIZE)]
 
-
         sequence_number = 0
 
-        send_packet_to_clients(frame_number, sequence_number, len(chunks).to_bytes(4, 'big'))
+        send_packet_to_clients(frame_number, sequence_number,
+                               len(chunks).to_bytes(4, 'big'))
 
         sequence_number += 1
 
@@ -130,31 +131,39 @@ def handle_client():
         ret, frame = video_capture.read()
         frame_number += 1
 
+
 def send_media_to_clients():
     while True:
-        if empty_clients(): continue
+        if len(clients_address) > 0:
+            handle_client()
 
-        handle_client()
+
+def handle_args():
+    global delay
+    parser = argparse.ArgumentParser(
+        prog='Server',
+        description='Server that sends media to clients'
+    )
+
+    parser.add_argument('-d', '--delay', type=float,
+                        help='Defines a time interval, in milliseconds, for sending packets')
+
+    args = parser.parse_args()
+
+    if args.delay != None:
+        delay = args.delay
+
 
 def main():
     add_log(f"Server is listening on {SERVER}:{PORT}")
 
+    handle_args()
+
     thread = threading.Thread(target=send_media_to_clients)
     thread.start()
 
-    listen_to_subscribes()
+    listen_to_subscriptions()
 
-parser = argparse.ArgumentParser(
-    prog='Server',
-    description='Server that sends media to clients'
-)
-
-parser.add_argument('-d', '--delay', type=float, help='Defines a time interval, in milliseconds, for sending packets')
-
-args = parser.parse_args()
-
-if args.delay != None:
-    delay = args.delay
 
 try:
     main()

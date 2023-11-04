@@ -6,7 +6,6 @@ import cv2
 import numpy
 import threading
 import time
-import uuid
 
 
 class PacketDict(TypedDict):
@@ -34,7 +33,7 @@ HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
 MAX_PACKAGE_SIZE = HEADER_SIZE + MAX_PAYLOAD_SIZE
 START_MESSAGE = '!start'
 BUFFER_SIZE = 3600
-SECONDS_TO_RECEIVE_CONFIRMATION = 5
+CONFIRMATION_TIMEOUT = 5
 SUBSCRIBED_MESSAGE = '!subscribed'
 
 client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -59,14 +58,15 @@ def add_log(message: str):
 
 
 def start_communication():
-    add_log("Subscribing...")
+    add_log("Subscribing to server...")
     client.sendto(START_MESSAGE.encode('utf-8'), ADDRESS)
 
 
 def play_buffer():
     global buffer_count
+    cv2.namedWindow('Video', cv2.WINDOW_NORMAL)
     while True:
-        #add_log(f"BUFFER COUNT: {buffer_count}")
+        # add_log(f"BUFFER LENGTH: {buffer_count}")
         if (buffer_count > 0):
             frame_data = buffer[buffer_init['index']]
             if (frame_data != None):
@@ -100,10 +100,6 @@ def mount_full_frame(frame_number: int, total: int, data: PacketData):
         buffer_index = buffer_end['index'] + offset
         if (buffer_end['index'] == 0 and offset < 0) or (buffer_end['index'] == BUFFER_SIZE - 1 and offset > 0):
             buffer_index = abs(BUFFER_SIZE - buffer_index)
-
-    #print(f"BUFFER INDEX: {buffer_index}")
-    #print(f"BUFFER END INDEX: {buffer_end['index']}")
-    #print(f"OFFSET: {offset}")
 
     if offset > 0 or buffer_end['index'] == -1:
         buffer_end['index'] = buffer_index
@@ -139,7 +135,6 @@ def append_package(frame_number: int, sequence_number: int, frame_data: bytes):
 
             if ('received' in frame) and ('total' in frame):
                 if frame['received'] == frame['total']:
-                    #add_log(f"FULL FRAME {frame_number}")
                     mount_full_frame(
                         frame_number, frame['total'], frame['data'])
 
@@ -148,65 +143,65 @@ def start_player():
     thread = threading.Thread(target=play_buffer)
     thread.start()
 
-def receive_from_server():
-    return client.recvfrom(MAX_PACKAGE_SIZE)
 
 def unpack_packet(packet):
+    global video_fps
     header = packet[:HEADER_SIZE]
-    frame_number, sequence_number, video_fps, payload_size = struct.unpack(
+    frame_number, sequence_number, fps, payload_size = struct.unpack(
         HEADER_FORMAT, header)
     frame_data = packet[HEADER_SIZE:]
+    video_fps = fps
 
-    return frame_number, sequence_number, video_fps, payload_size, frame_data
+    return frame_number, sequence_number, fps, payload_size, frame_data
 
-def decode_data(data):
-    return data.decode('utf-8')
 
 def subscribed():
     subscribed = False
     start_time = time.time()
 
     while (not subscribed) and True:
-        packet, _ = receive_from_server()
+        packet, _ = client.recvfrom(MAX_PACKAGE_SIZE)
 
         key_one, key_two, key_three, _, data = unpack_packet(packet)
 
         if key_one == 0 and key_two == 0 and key_three == 0:
-            decoded_data = decode_data(data)
+            decoded_data = data.decode('utf-8')
 
             if decoded_data == SUBSCRIBED_MESSAGE:
                 subscribed = True
 
-        if time.time() - start_time >= SECONDS_TO_RECEIVE_CONFIRMATION: break
+        if time.time() - start_time >= CONFIRMATION_TIMEOUT:
+            break
 
     return subscribed
+
 
 def listen_from_server():
     global video_fps
 
-    #add_log("Listening to server...")
+    add_log("Listening to server...")
 
     while True:
-        packet, _ = receive_from_server()
-        #add_log(f"Received a package from {address}")
+        packet, address = client.recvfrom(MAX_PACKAGE_SIZE)
+        # add_log(f"Received a package from {address}")
 
-        frame_number, sequence_number, video_fps, _, frame_data = unpack_packet(packet)
+        frame_number, sequence_number, video_fps, payload_size, frame_data = unpack_packet(
+            packet)
 
         append_package(frame_number, sequence_number, frame_data)
 
-        #add_log(
-         #   f"[PACKAGE INFO]: frame: {frame_number} - sequence: {sequence_number} - size: {payload_size}")
+        # add_log(
+        #     f"[PACKAGE INFO]: frame: {frame_number} - sequence: {sequence_number} - size: {payload_size}")
 
 
 try:
     start_communication()
 
-    if subscribed():
-        add_log(f"Im am subscribed!")
-
-        start_player()
-        listen_from_server()
-    else:
-        add_log("I did not receive the confirmation about my inscription :v.")
+    start_player()
+    listen_from_server()
+    # if subscribed():
+    #     add_log("Client is now subscribed")
+    # else:
+    #     add_log("No subscription response from server")
 finally:
     client.close()
