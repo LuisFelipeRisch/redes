@@ -12,7 +12,7 @@ import os
 import signal
 
 SERVER = socket.gethostbyname(socket.gethostname())
-MAX_PAYLOAD_SIZE = 65000
+MAX_PAYLOAD_SIZE = 5000
 HEADER_FORMAT = "!IIHHI"
 HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
 MAX_PACKAGE_SIZE = HEADER_SIZE + MAX_PAYLOAD_SIZE

@@ -29,7 +29,7 @@ class FrameDict(TypedDict):
 
 
 HEADER_FORMAT = "!IIHHI"
-MAX_PAYLOAD_SIZE = 65000
+MAX_PAYLOAD_SIZE = 5000
 HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
 MAX_PACKAGE_SIZE = HEADER_SIZE + MAX_PAYLOAD_SIZE
 BUFFER_SIZE = 3600
@@ -50,6 +50,11 @@ video_finished = False
 server_ip = ""
 server_port = ""
 client = None
+
+expected_sequence = 0
+
+unordered_count = 0
+unreceived_count = 0
 
 
 def get_timestamp():
@@ -124,10 +129,15 @@ def mount_full_frame(frame_number: int, total: int, data: PacketData):
 
 
 def append_package(frame_number: int, sequence_number: int, frame_data: bytes):
-    global video_finished
+    global video_finished, unordered_count, expected_sequence
 
     frame_key = f"{frame_number}"
     data_key = f"{sequence_number}"
+
+    if (sequence_number != expected_sequence and sequence_number > (expected_sequence - 1)):
+        unordered_count += 1
+
+    expected_sequence = sequence_number + 1
 
     if frame_key not in frames:
         if sequence_number == 0:
@@ -151,6 +161,7 @@ def append_package(frame_number: int, sequence_number: int, frame_data: bytes):
 
             if ('received' in frame) and ('total' in frame):
                 if frame['received'] == frame['total']:
+                    expected_sequence = 0
                     mount_full_frame(
                         frame_number, frame['total'], frame['data'])
                     if frame_number == (total_frames - 1):
@@ -189,10 +200,10 @@ def listen_from_server():
         frame_number, sequence_number, video_fps, payload_size, frame_data = unpack_packet(
             packet)
 
-        append_package(frame_number, sequence_number, frame_data)
-
         add_log(
             f"[PACKAGE INFO]: frame: {frame_number} - sequence: {sequence_number} - size: {payload_size}")
+
+        append_package(frame_number, sequence_number, frame_data)
 
 
 def handle_args():
@@ -236,6 +247,25 @@ def signal_handler(sig, frame):
     os._exit(0)
 
 
+def count_lost_packets():
+    lost_count = 0
+    for frame_key, frame in frames.items():
+        if 'total' not in frame:
+            add_log(
+                f"It is impossible to precisely determine the number of packets lost by the client in frame {frame_key} due to incomplete data transmission. However, it is evident that the client lost, at the very least, one packet, specifically the initial packet of the frame.")
+            lost_count += 1
+        else:
+            lost_count += (frame['total'] - frame['received'])
+
+    return lost_count
+
+
+def show_report():
+    lost_count = count_lost_packets()
+    add_log(
+        f"There were {lost_count} packets lost and {unordered_count} packets received out of order.")
+
+
 def main():
     global client
     try:
@@ -248,6 +278,8 @@ def main():
 
         start_player()
         listen_from_server()
+
+        show_report()
     finally:
         close_socket()
 
