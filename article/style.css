@@ -1,0 +1,117 @@
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap');
+
+* {
+    margin: 0;
+    padding: 0;
+    border: 0 solid transparent;
+}
+
+h2, h3, h4 {
+    margin-top: 15px;
+    margin-bottom: 15px;
+}
+
+body {
+  min-height: 100vh;
+  line-height: 1.5rem;
+  text-rendering: optimizeSpeed;
+  font-family: 'inter';
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+header {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    justify-content: center;
+    align-items: center;
+    padding: 20px 0px 20px 0px;
+    background-color: #A0AEC0;
+}
+
+header h2 {
+    margin-bottom: 0;
+}
+
+
+main {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    max-width: 1368px;
+    min-width: 780px;
+    align-self: center;
+    padding: 20px 50px 20px 50px;
+    text-align: justify;
+}
+
+#pdu-table {
+    margin-top: 15px;
+    margin-bottom: 15px;
+    border-spacing: 0;
+    border: 1px solid black;
+}
+
+#pdu-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding-left: 15px;
+    padding-right: 15px;
+    margin-bottom: 15px;
+}
+
+#pdu-table th {
+    border: 1px solid black;
+    text-align: center;
+    background-color: #E2E8F0;
+}
+
+#pdu-table td {
+    border: 1px solid black;
+    text-align: center;
+}
+
+#read-video-img {
+    width: 500px;
+    aspect-ratio: calc(566 / 361);
+    align-self: center;
+    margin-top: 15px;
+    margin-bottom: 15px
+}
+
+.figure-description {
+    text-align: center;
+    margin-bottom: 15px;
+}
+
+#frame-division-list {
+    margin-left: 20px;
+    margin-top: 10px;
+}
+
+#frame-dict {
+    align-self: center;
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
+
+footer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background-color: #4A5568;
+    color: white;
+    padding: 20px 0px 20px 0px;
+}
+
+footer > h3 {
+    margin-bottom: 10px;
+}
+
+footer p:first-of-type {
+    margin-bottom: 5px;
+}

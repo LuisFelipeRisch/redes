@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='utf-8'>
+    <meta http-equiv='X-UA-Compatible' content='IE=edge'>
+    <title>Page Title</title>
+    <meta name='viewport' content='width=device-width, initial-scale=1'>
+    <link rel='stylesheet' type='text/css' media='screen' href='style.css'>
+    <script src='main.js'></script>
+</head>
+<body>
+    <header>
+      <h1>Implementação de Video Stream em Python</h1>
+      <h2>Relatório de Implementação</h1>
+    </header>
+    <main>
+        <h2>1. Introdução</h2>
+        <p>
+          Este relatório descreve um projeto em que implementamos um programa cliente-servidor UDP em python para transmitir vídeo em tempo real pela rede.
+          O objetivo do projeto é demonstrar a viabilidade de transmitir vídeos usando o protocolo UDP, apesar da sua falta de garantia de entrega e order dos pacotes enviados.
+          A aplicação é construída em duas partes: um servior que captura, comprime e envia frames para os clientes e um cliente que recebe e exibe o vídeo em tempo real.
+        </p>
+        <p>
+          Neste relatório, descreveremos a arquitetura do sistema, as tecnologias e ferramentas utilizadas, os desafios enfretados durante o desenvolvimento e as soluções encontradas pela dupla.
+          Além disso, apresentaremos resultados e discussões sobre o funcionamento e desempenho do programa, incluindo a quantidade de pacotes que se perderem e chegaram fora de ordem.
+        </p>
+
+        <h2>2. Desenvolvimento</h2>
+        <p>
+          Nesta seção apresentamos as particularidades da nossa implementação, entrando em maiores detalhes a respeito do código do cliente e do servidor.
+        </p>
+
+        <h3>2.1. Formato do PDU da Aplicação</h3>
+        <p>
+            A aplicação desenvolvida possui o formato de PDU abaixo:
+        </p>
+        <table id="pdu-table">
+            <tr>
+                <th>frame</th>
+                <th>sequence</th>
+                <th>fps</th>
+                <th>payload_size</th>
+                <th>total_frames</th>
+                <th>payload</th>
+            </tr>
+            <tr>
+                <td>4 Bytes</td>
+                <td>4 Bytes</td>
+                <td>2 Bytes</td>
+                <td>2 Bytes</td>
+                <td>4 Bytes</td>
+                <td>1 - 5000 Bytes</td>
+            </tr>
+        </table>
+        <section id="pdu-section">
+            <p><b>frame: </b> Indica o número do frame ao qual este pacote pertence.</p>
+            <p><b>sequence: </b> Indica a sequência deste pacote dentro do frame especificado.</p>
+            <p><b>fps: </b> Indica o fps do vídeo que está sendo transmitido. É necessário enviar o fps em todos os 
+                pacotes porque clientes podem começar a ouvir o servidor a qualquer momento durante a transmissão.</p>
+            <p><b>payload_size: </b> Indica o tamanho do payload em bytes.</p>
+            <p><b>total_frames: </b> Indica o número total de frames. É utilizado pelo cliente para detectar que recebeu 
+                o último frame e que o server parou de transmitir.</p>
+            <p><b>payload: </b> Os bytes a serem transmitidos.</p>
+        </section>
+        <p>Podemos notar no PDU acima que os campos <b>fps</b> e <b>total_frames</b> são enviados de forma repetida 
+            em todo pacote. Isto é necessário devido à natureza da aplicação, que é execução de vídeo em tempo real. Deste modo,
+            como clientes podem se inscrever a qualquer momento na transmissão, eles devem ser capaz de determinar o 
+            fps e qual é o último frame do vídeo.</p>
+
+        <h3>2.2. O Servidor</h3>
+        <p>Nesta seção discutiremos sobre a implementação do servidor, com por exemplo: como é realizada a leitura do
+            vídeo, como é realizada a divisão do payload entre os vários pacotes etc.
+        </p>
+        
+        <h4>2.2.1 Inscrições de Clientes</h4>
+        <p>Assim que o servidor inicia ele começa a ouvir por inscrições dos clientes. O servidor implementa uma lista de clientes
+            que estão inscritos para receber o streaming de vídeo. Dessa forma, existem mensagens específicas de subscription e 
+            unsubscription as quais são conhecidas pelo servidor para realizar a inscrição ou desinscrição de um cliente.
+        </p>
+
+        <h4>2.2.2 Leitura do Vídeo</h4>
+        <p>
+          Para esta tarefa, utilizamos a biblioteca OpenCV, uma ferramenta que nos permite ler o vídeo frame por frame.
+          Sabemos que vídeos podem ser transmitidos de forma mais eficiente, mas isso depende do uso de outros procolos específicos, 
+          neste caso utilizamos apenas o protocolo UDP para transporte. 
+        </p>
+        <img src="read-video.jpeg" id="read-video-img"/>
+        <p class="figure-description"><b>Figura 1</b> - Exemplo de leitura de vídeo com OpenCV</p>
+
+        <p>
+          Cada frame é lido e, em seguida, armazenado em uma fila, uma estrutura de dados que a própria biblioteca Queue do Python fornece. 
+          Isso garante que o processo de leitura e armazenamento de quadros ocorra de forma organizada e eficiente, permitindo que outra parte 
+          do programa se preocupe somente com o envio dos pacotes 
+        </p>
+        
+        <h4>2.2.3 Divisão dos frames em pacotes</h4>
+        <p>
+          Com uma thread específica para a leitura do vídeo, criamos outra thread resposável pela divisão do 
+          frame em pacotes e envio dos mesmos. Esse processo ocorre da seguinte forma: 
+        </p>
+
+        <ol id="frame-division-list">
+          <li>
+            Obtém um quadro da fila;
+          </li>
+          <li>
+            Codigica o frame para o formato JPEG;
+          </li>
+          <li>
+            Divide os bytes do quadro em pedaços menores, ou seja, em "chunks" com um tamanho máximo de 5000 bytes;
+          </li>
+          <li>
+            Cada chunk é enviado para os clientes com informações incluídas no cabeçalho do pacote, tais como o índice do frame atual e o índice do chunk. 
+            Essa estratégia permite que o cliente organize os pacotes de forma a restaurar a ordem original do vídeo.
+          </li>
+        </ol>
+            
+        <h3>2.3. O Cliente</h3>
+        <p>Nesta seção discutiremos sobre a implementação do cliente, como por exemplo: como é realizada a conexão com o servidor
+            como os pacotes recebidos são geridos etc.
+        </p>
+
+        <h4>2.3.1. Organização dos Pacotes</h4>
+        <p>Como vimos anteriormente, o PDU da aplicação possui dois inteiros que são importantes para a ordenação dos pacotes
+            do lado do cliente, sendo eles o <b>frame</b> e o <b>sequence</b>. O cliente armazena todos os pacotes em um dicionário,
+            o qual possui o seguinte formato:
+        </p>
+        <code id="frame-dict">
+            <pre>
+{
+    '&lt;frame-number&gt;': {
+        'id': # Número do frame
+        'total': # Total de pacotes existente para este frame
+        'received': # Total de pacotes já recebidos deste frame
+        'data': {
+            '&lt;packet-sequence&gt;': {
+                'id': # Número de sequência
+                'data': # Bytes do pacote
+            }
+            ...
+        }
+    }
+    ...
+}
+            </pre> 
+        </code>
+        <p>
+            As chaves marcadas como <b>&lt;frame-number&gt;</b> e <b>&lt;packet-sequence&gt;</b> são, respectivamente, o número do 
+            frame e a sequencia do pacote em específico. Dessa forma conseguimos rapidamente adicionar pacotes recebidos no dicionário
+            do frame ao qual pertencem. Essa estrutura se mostrou bastante útil porque conseguimos obter qualquer pacote já recebido
+            de qualquer frame em tempo médio O(1), tornando assim a ordenação dos pacotes bastante eficiente já que a busca pelo pacote é rápida.
+        </p>
+        <p>Uma particularidade da aplicação, a qual é necessária para detectarmos que um frame foi recebido por completo é aquela chave
+            'total' armazenada dentro do dicionário de cada frame. A aplicação recebe esta informação por meio do pacote de sequência 0 de cada frame, ou seja,
+            todo pacote de sequência zero carrega em seu payload a quantidade total de pacotes que o servidor vai enviar para aquele frame, para que assim o cliente
+            saiba quando um frame pode ser montado por completo. Dessa forma, quando o valor de 'received' é igual ao valor de 'total', então o cliente sabe que pode
+            ordenar e montar o frame por completo.
+        </p>
+        <p>
+            Por fim, o frame montado é armazenado em um buffer que é então consumido pela thread responsável por rodar o vídeo. Este é um buffer circular simples 
+            onde todos os frames prontos vão sendo armazenados até que chegue o momento certo dele ser exibido, sendo este momento definido pelo fps do vídeo que está
+            sendo transmitido.
+        </p>
+
+        <h4>2.3.2. O Player de Vídeo</h4>
+        <p>
+            
+        </p>
+    </main>
+    <footer>
+        <h3>Desenvolvido por</h3>
+        <p>Ariel Evaldt Schmitt (GRR20203949) - aes20@inf.ufpr.br</p>
+        <p>Luis Felipe Risch (GRR20203940) - lfr20@inf.ufpr.br</p>
+    </footer>
+</body>
+</html>
