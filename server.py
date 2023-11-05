@@ -13,7 +13,7 @@ import signal
 
 SERVER = socket.gethostbyname(socket.gethostname())
 MAX_PAYLOAD_SIZE = 65000
-HEADER_FORMAT = "!IIHH"
+HEADER_FORMAT = "!IIHHI"
 HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
 MAX_PACKAGE_SIZE = HEADER_SIZE + MAX_PAYLOAD_SIZE
 SUBSCRIBE_MESSAGE = '!subscribe'
@@ -35,6 +35,7 @@ video_capture = None
 video_finished = False
 media_path = ""
 video_fps = 0
+total_frames = 0
 
 
 def get_timestamp():
@@ -46,10 +47,10 @@ def add_log(message: str):
     print(f"[{get_timestamp()}]: {message}")
 
 
-def build_packet(frame_number: int, sequence_number: int, video_fps: int, payload: bytes) -> bytes:
+def build_packet(frame_number: int, sequence_number: int, video_fps: int, total_frames: int, payload: bytes) -> bytes:
     # Build the packet header
     header = struct.pack(HEADER_FORMAT, frame_number,
-                         sequence_number, video_fps, len(payload))
+                         sequence_number, video_fps, len(payload), total_frames)
     # Prepend the header to the payload
     packet = header + payload
     return packet
@@ -108,8 +109,11 @@ def listen_clients():
 
 # Build and send a packet to all clients
 def send_packet_to_clients(frame_number, sequence_number, payload):
+    add_log(
+        f"[PACKAGE INFO]: frame: {frame_number} - sequence: {sequence_number} - size: {len(payload)}")
+
     packet = build_packet(
-        frame_number, sequence_number, video_fps, payload)
+        frame_number, sequence_number, video_fps, total_frames, payload)
     for client_address in clients_address:
         send_packet(packet, client_address)
 
@@ -125,10 +129,12 @@ def rewind_video():
 
 # Reads the video frame by frame and stores each frame in a queue
 def read_video():
-    global video_fps, video_capture, video_finished
+    global video_fps, video_capture, video_finished, total_frames
     video_capture = cv2.VideoCapture(media_path)
     # Gets the video FPS and stores in a global variable
     video_fps = int(video_capture.get(cv2.CAP_PROP_FPS))
+    # Gets the video total number of frames and stores in a global variable
+    total_frames = int(video_capture.get(cv2.CAP_PROP_FRAME_COUNT))
     while video_capture.isOpened():
         try:
             _, frame = video_capture.read()
@@ -149,7 +155,7 @@ def handle_clients():
     frame_number = 0
 
     while len(clients_address) > 0:
-        if video_finished:
+        if video_finished and frame_queue.empty():
             disconnect_clients()
             rewind_video()
             break
@@ -174,10 +180,7 @@ def handle_clients():
 
         # Send each chunk to client
         for chunk in chunks:
-            add_log(
-                f"[PACKAGE INFO]: frame: {frame_number} - sequence: {sequence_number} - size: {len(chunk)}")
             send_packet_to_clients(frame_number, sequence_number, chunk)
-
             sequence_number += 1
 
         frame_number += 1

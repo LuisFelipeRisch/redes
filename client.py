@@ -28,8 +28,7 @@ class FrameDict(TypedDict):
     data: PacketData
 
 
-HEADER_FORMAT = "!IIHH"
-CONFIG_FORMAT = "!II"
+HEADER_FORMAT = "!IIHHI"
 MAX_PAYLOAD_SIZE = 65000
 HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
 MAX_PACKAGE_SIZE = HEADER_SIZE + MAX_PAYLOAD_SIZE
@@ -45,6 +44,8 @@ buffer = [None] * BUFFER_SIZE
 frames: Dict[str, FrameDict] = {}
 
 video_fps = 0
+total_frames = 0
+video_finished = False
 
 server_ip = ""
 server_port = ""
@@ -74,7 +75,7 @@ def subscribe():
 def play_buffer():
     global buffer_count
     cv2.namedWindow('Video', cv2.WINDOW_NORMAL)
-    while True:
+    while not video_finished or buffer_count > 0:
         if (buffer_count > 0):
             frame_data = buffer[buffer_init['index']]
             if (frame_data != None):
@@ -123,6 +124,8 @@ def mount_full_frame(frame_number: int, total: int, data: PacketData):
 
 
 def append_package(frame_number: int, sequence_number: int, frame_data: bytes):
+    global video_finished
+
     frame_key = f"{frame_number}"
     data_key = f"{sequence_number}"
 
@@ -150,6 +153,10 @@ def append_package(frame_number: int, sequence_number: int, frame_data: bytes):
                 if frame['received'] == frame['total']:
                     mount_full_frame(
                         frame_number, frame['total'], frame['data'])
+                    if frame_number == (total_frames - 1):
+                        add_log(
+                            "All frames received. The client stopped listening from the server.")
+                        video_finished = True
 
 
 def start_player():
@@ -158,12 +165,14 @@ def start_player():
 
 
 def unpack_packet(packet):
-    global video_fps
+    global video_fps, total_frames
     header = packet[:HEADER_SIZE]
-    frame_number, sequence_number, fps, payload_size = struct.unpack(
+    frame_number, sequence_number, fps, payload_size, frames_count = struct.unpack(
         HEADER_FORMAT, header)
     frame_data = packet[HEADER_SIZE:]
+
     video_fps = fps
+    total_frames = frames_count
 
     return frame_number, sequence_number, fps, payload_size, frame_data
 
@@ -173,7 +182,7 @@ def listen_from_server():
 
     add_log("Listening to server...")
 
-    while True:
+    while not video_finished:
         packet, address = client.recvfrom(MAX_PACKAGE_SIZE)
         add_log(f"Received a package from {address}")
 
@@ -211,12 +220,19 @@ def handle_args():
     server_port = args.server_port
 
 
+def close_socket():
+    global client
+    if client != None:
+        client.close()
+        client = None
+
+
 # Unsubscribe the server if a ctrl + C is received
 def signal_handler(sig, frame):
     global client
-    unsubscribe()
     if client != None:
-        client.close()
+        unsubscribe()
+    close_socket()
     os._exit(0)
 
 
@@ -233,8 +249,7 @@ def main():
         start_player()
         listen_from_server()
     finally:
-        if client != None:
-            client.close()
+        close_socket()
 
 
 main()
