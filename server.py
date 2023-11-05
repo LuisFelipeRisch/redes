@@ -11,8 +11,6 @@ import queue
 import os
 
 SERVER = socket.gethostbyname(socket.gethostname())
-PORT = 3030
-ADDRESS = (SERVER, PORT)
 MAX_PAYLOAD_SIZE = 65000
 HEADER_FORMAT = "!IIHH"
 HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
@@ -21,16 +19,17 @@ SUBSCRIBE_MESSAGE = '!subscribe'
 UNSUBSCRIBE_MESSAGE = '!unsubscribe'
 VIDEO_WIDTH = 400
 
-server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-server.bind(ADDRESS)
-
-video_fps = 0
+port = 3030
+server = None
 delay = 0
-clients_address = []
-frame_queue = queue.Queue(maxsize=10)
 
-media_path = ""
+clients_address = []
+
+frame_queue = queue.Queue(maxsize=10)
 video_capture = None
+video_finished = False
+media_path = ""
+video_fps = 0
 
 
 def get_timestamp():
@@ -64,8 +63,14 @@ def client_already_subscribed(address):
     return False
 
 
+def disconnect_clients():
+    global clients_address
+    add_log("Disconneted all clients.")
+    clients_address = []
+
+
 def listen_clients():
-    add_log(f"Server is listening for subscriptions on {SERVER}:{PORT}")
+    add_log(f"Server is listening for subscriptions on {SERVER}:{port}")
 
     while True:
         data, address = server.recvfrom(MAX_PACKAGE_SIZE)
@@ -100,21 +105,24 @@ def send_packet_to_clients(frame_number, sequence_number, payload):
 
 
 def rewind_video():
+    global video_finished
     video_capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
+    video_finished = False
+    start_read_video()
 
 
 def read_video():
-    global video_fps, video_capture
+    global video_fps, video_capture, video_finished
     video_capture = cv2.VideoCapture(media_path)
     video_fps = int(video_capture.get(cv2.CAP_PROP_FPS))
-    while (video_capture.isOpened()):
+    while video_capture.isOpened() and not video_finished:
         try:
             _, frame = video_capture.read()
             frame = imutils.resize(frame, width=VIDEO_WIDTH)
             frame_queue.put(frame)
         except:
-            os._exit(1)
-    add_log('Player closed')
+            video_finished = True
+    add_log('Player closed.')
     video_capture.release()
 
 
@@ -124,6 +132,10 @@ def handle_client():
     frame_number = 0
 
     while len(clients_address) > 0:
+        if video_finished and frame_queue.empty():
+            disconnect_clients()
+            rewind_video()
+            break
         frame = frame_queue.get()
         retval, raw_frame = cv2.imencode(
             ".jpeg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
@@ -162,7 +174,7 @@ def check_file_existence(file_path):
 
 
 def handle_args():
-    global delay, media_path
+    global delay, media_path, port
 
     parser = argparse.ArgumentParser(
         prog='Server',
@@ -175,6 +187,9 @@ def handle_args():
     parser.add_argument('-m', '--media-path', type=str,
                         help='Defines the path to the media. Must be a video file (.mp4)')
 
+    parser.add_argument('-p', '--port', type=int,
+                        help='Defines the port the server will listen to. Default is 3030.')
+
     args = parser.parse_args()
 
     if args.media_path == None:
@@ -186,15 +201,26 @@ def handle_args():
     if args.delay != None:
         delay = args.delay
 
+    if args.port != None:
+        port = args.port
+
+
+def start_read_video():
+    video_thread = threading.Thread(target=read_video)
+    video_thread.start()
+
 
 def main():
+    global server
 
     handle_args()
 
+    server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    server.bind((SERVER, port))
+
     check_file_existence(media_path)
 
-    video_thread = threading.Thread(target=read_video)
-    video_thread.start()
+    start_read_video()
 
     thread = threading.Thread(target=send_media_to_clients)
     thread.start()
