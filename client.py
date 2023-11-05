@@ -9,6 +9,8 @@ import time
 import base64
 import argparse
 import os
+import traceback
+import signal
 
 
 class PacketDict(TypedDict):
@@ -209,9 +211,20 @@ def handle_args():
     server_port = args.server_port
 
 
+# Unsubscribe the server if a ctrl + C is received
+def signal_handler(sig, frame):
+    global client
+    unsubscribe()
+    if client != None:
+        client.close()
+    os._exit(0)
+
+
 def main():
     global client
     try:
+        signal.signal(signal.SIGINT, signal_handler)
+
         handle_args()
 
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -220,7 +233,8 @@ def main():
         start_player()
         listen_from_server()
     finally:
-        client.close()
+        if client != None:
+            client.close()
 
 
 main()
