@@ -32,7 +32,7 @@ HEADER_FORMAT = "!IIHHI"
 MAX_PAYLOAD_SIZE = 5000
 HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
 MAX_PACKAGE_SIZE = HEADER_SIZE + MAX_PAYLOAD_SIZE
-BUFFER_SIZE = 3600
+BUFFER_SIZE = 10000
 CONFIRMATION_TIMEOUT = 5
 SUBSCRIBE_MESSAGE = '!subscribe'
 UNSUBSCRIBE_MESSAGE = '!unsubscribe'
@@ -66,17 +66,20 @@ def add_log(message: str):
     print(f"[{get_timestamp()}]: {message}")
 
 
+# Send unsubscribe message to server
 def unsubscribe():
     add_log("Subscribing to server...")
     client.sendto(UNSUBSCRIBE_MESSAGE.encode(
         'utf-8'), (server_ip, server_port))
 
 
+# Send subscribe message to server
 def subscribe():
     add_log("Subscribing to server...")
     client.sendto(SUBSCRIBE_MESSAGE.encode('utf-8'), (server_ip, server_port))
 
 
+# Play the video loaded from the buffer
 def play_buffer():
     global buffer_count
     cv2.namedWindow('Video', cv2.WINDOW_NORMAL)
@@ -84,6 +87,7 @@ def play_buffer():
         if (buffer_count > 0):
             frame_data = buffer[buffer_init['index']]
             if (frame_data != None):
+                # Sleep the thread in order to play in the correct frame rate
                 time.sleep(1/video_fps)
                 play_frame(frame_data)
                 buffer[buffer_init['index']] = None
@@ -91,18 +95,21 @@ def play_buffer():
             buffer_init['index'] = (buffer_init['index'] + 1) % BUFFER_SIZE
 
 
+# Decode the frame_data and display the frame
 def play_frame(frame_data: bytes):
     decoded_data = base64.b64decode(frame_data, ' /')
     npdata = np.fromstring(decoded_data, dtype=np.uint8)
     frame = cv2.imdecode(npdata, 1)
     cv2.imshow('Video', frame)
     key = cv2.waitKey(1) & 0xFF
+    # Exit the client if the key 'q' is pressed
     if key == ord('q'):
         unsubscribe()
         client.close()
         os._exit(1)
 
 
+# Mount the frame when it was fully received and store the frame in the buffer
 def mount_full_frame(frame_number: int, total: int, data: PacketData):
     global buffer_count
     bytes = b""
@@ -128,6 +135,7 @@ def mount_full_frame(frame_number: int, total: int, data: PacketData):
     buffer_count += 1
 
 
+# Append the received packet in its correct place in the dictionary
 def append_package(frame_number: int, sequence_number: int, frame_data: bytes):
     global video_finished, unordered_count, expected_sequence
 
@@ -135,11 +143,15 @@ def append_package(frame_number: int, sequence_number: int, frame_data: bytes):
     data_key = f"{sequence_number}"
 
     if (sequence_number != expected_sequence and sequence_number > (expected_sequence - 1)):
+        add_log(
+            f"[OUT OF ORDER] Sequence {expected_sequence} was expected but sequence {sequence_number} was received.")
         unordered_count += 1
 
     expected_sequence = sequence_number + 1
 
+    # If it is a new frame
     if frame_key not in frames:
+        # Sequence 0 always carry the total number of packets for that frame
         if sequence_number == 0:
             total = int.from_bytes(frame_data, 'big')
 
@@ -159,11 +171,13 @@ def append_package(frame_number: int, sequence_number: int, frame_data: bytes):
             frame['data'][data_key] = {
                 'id': sequence_number, 'data': frame_data}
 
+            # Check if the frame was fully received
             if ('received' in frame) and ('total' in frame):
                 if frame['received'] == frame['total']:
                     expected_sequence = 0
                     mount_full_frame(
                         frame_number, frame['total'], frame['data'])
+                    # The client stops listening when the last frame was fully received
                     if frame_number == (total_frames - 1):
                         add_log(
                             "All frames received. The client stopped listening from the server.")
@@ -238,7 +252,7 @@ def close_socket():
         client = None
 
 
-# Unsubscribe the server if a ctrl + C is received
+# Unsubscribe from the server if a ctrl + C is received
 def signal_handler(sig, frame):
     global client
     if client != None:
@@ -260,6 +274,7 @@ def count_lost_packets():
     return lost_count
 
 
+# Prints the client communication report
 def show_report():
     lost_count = count_lost_packets()
     add_log(

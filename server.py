@@ -115,6 +115,7 @@ def send_packet_to_clients(frame_number, sequence_number, payload):
     packet = build_packet(
         frame_number, sequence_number, video_fps, total_frames, payload)
     for client_address in clients_address:
+        add_log(f"The above packet was sent to {client_address}")
         send_packet(packet, client_address)
 
 
