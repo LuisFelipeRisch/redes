@@ -14,6 +14,42 @@
       <h2>Relatório de Implementação</h1>
     </header>
     <main>
+        <Section>
+            <h3>Código-Fonte</h3>
+            <div class="exec1-log">
+                <a href="./app/server.py.txt" target="_blank">Servidor</a>
+                <a href="./app/client.py.txt" target="_blank">Cliente</a>
+            </div>
+            <h3>Logs de execução</h3>
+            <div class="exec1-log">
+                <p>Execução 1:</p>
+                <a href="./exec1/server.logs.txt" target="_blank">Servidor</a>
+                <a href="./exec1/client1.logs.txt" target="_blank">Cliente 1</a>
+                <a href="./exec1/client2.logs.txt" target="_blank">Cliente 2</a>
+                <a href="./exec1/client3.logs.txt" target="_blank">Cliente 3</a>
+            </div>
+            <div class="exec1-log">
+                <p>Execução 2:</p>
+                <a href="./exec2/server.logs.txt" target="_blank">Servidor</a>
+                <a href="./exec2/client1.logs.txt" target="_blank">Cliente 1</a>
+                <a href="./exec2/client2.logs.txt" target="_blank">Cliente 2</a>
+            </div>
+            <div class="exec1-log">
+                <p>Execução 3:</p>
+                <a href="./exec3/server.logs.txt" target="_blank">Servidor</a>
+                <a href="./exec3/client1.logs.txt" target="_blank">Cliente 1</a>
+                <a href="./exec3/client2.logs.txt" target="_blank">Cliente 2</a>
+                <a href="./exec3/client3.logs.txt" target="_blank">Cliente 3</a>
+            </div>
+            <div class="exec1-log">
+                <p>Execução 4:</p>
+                <a href="./exec4/server.logs.txt" target="_blank">Servidor</a>
+                <a href="./exec4/client1.logs.txt" target="_blank">Cliente 1</a>
+                <a href="./exec4/client2.logs.txt" target="_blank">Cliente 2</a>
+                <a href="./exec4/client3.logs.txt" target="_blank">Cliente 3</a>
+            </div>
+        </Section>
+
         <h2>1. Introdução</h2>
         <p>
           Este relatório descreve um projeto em que implementamos um programa cliente-servidor UDP em python para transmitir vídeo em tempo real pela rede.
@@ -127,21 +163,21 @@
         </p>
         <code id="frame-dict">
             <pre>
-                {
-                    '&lt;frame-number&gt;': {
-                        'id': # Número do frame
-                        'total': # Total de pacotes existente para este frame
-                        'received': # Total de pacotes já recebidos deste frame
-                        'data': {
-                            '&lt;packet-sequence&gt;': {
-                                'id': # Número de sequência
-                                'data': # Bytes do pacote
-                            }
-                            ...
-                        }
-                    }
-                    ...
-                }
+{
+    '&lt;frame-number&gt;': {
+        'id': # Número do frame
+        'total': # Total de pacotes existente para este frame
+        'received': # Total de pacotes já recebidos deste frame
+        'data': {
+            '&lt;packet-sequence&gt;': {
+                'id': # Número de sequência
+                'data': # Bytes do pacote
+            }
+            ...
+        }
+    }
+    ...
+}
             </pre>
         </code>
         <p>

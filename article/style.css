@@ -36,6 +36,10 @@ header h2 {
     margin-bottom: 0;
 }
 
+.exec1-log {
+    display: flex;
+    gap: 20px
+}
 
 main {
     display: flex;
