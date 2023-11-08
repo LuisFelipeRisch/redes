@@ -53,12 +53,12 @@
         <h2>1. Introdução</h2>
         <p>
           Este relatório descreve um projeto em que implementamos um programa cliente-servidor UDP em python para transmitir vídeo em tempo real pela rede.
-          O objetivo do projeto é demonstrar a viabilidade de transmitir vídeos usando o protocolo UDP, apesar da sua falta de garantia de entrega e order dos pacotes enviados.
-          A aplicação é construída em duas partes: um servior que captura, comprime e envia frames para os clientes e um cliente que recebe e exibe o vídeo em tempo real.
+          O objetivo do projeto é demonstrar a viabilidade de transmitir vídeos usando o protocolo UDP, apesar da sua falta de garantia de entrega e ordem dos pacotes enviados.
+          A aplicação é construída em duas partes: um servior que captura, comprime e envia <i>frames</i> para os clientes e um cliente que recebe e exibe o vídeo em tempo real.
         </p>
         <p>
-          Neste relatório, descreveremos a arquitetura do sistema, as tecnologias e ferramentas utilizadas, os desafios enfretados durante o desenvolvimento e as soluções encontradas pela dupla.
-          Além disso, apresentaremos resultados e discussões sobre o funcionamento e desempenho do programa, incluindo a quantidade de pacotes que se perderem e chegaram fora de ordem.
+          A seguir, descreveremos a arquitetura do sistema, as tecnologias e ferramentas utilizadas, os desafios enfrentados durante o desenvolvimento e as soluções encontradas pela dupla.
+          Além disso, apresentaremos o resultado final da implementação.
         </p>
 
         <h2>2. Desenvolvimento</h2>
@@ -89,19 +89,19 @@
             </tr>
         </table>
         <section id="pdu-section">
-            <p><b>frame: </b> Indica o número do frame ao qual este pacote pertence.</p>
-            <p><b>sequence: </b> Indica a sequência deste pacote dentro do frame especificado.</p>
+            <p><b>frame: </b> Indica o número do <i>frame</i> ao qual este pacote pertence.</p>
+            <p><b>sequence: </b> Indica a sequência deste pacote dentro do <i>frame</i> especificado.</p>
             <p><b>fps: </b> Indica o fps do vídeo que está sendo transmitido. É necessário enviar o fps em todos os
                 pacotes porque clientes podem começar a ouvir o servidor a qualquer momento durante a transmissão.</p>
             <p><b>payload_size: </b> Indica o tamanho do payload em bytes.</p>
-            <p><b>total_frames: </b> Indica o número total de frames. É utilizado pelo cliente para detectar que recebeu
-                o último frame e que o server parou de transmitir.</p>
+            <p><b>total_frames: </b> Indica o número total de <i>frames</i>. É utilizado pelo cliente para detectar que recebeu
+                o último <i>frame</i> e que o server parou de transmitir.</p>
             <p><b>payload: </b> Os bytes a serem transmitidos.</p>
         </section>
         <p>Podemos notar no PDU acima que os campos <b>fps</b> e <b>total_frames</b> são enviados de forma repetida
             em todo pacote. Isto é necessário devido à natureza da aplicação, que é execução de vídeo em tempo real. Deste modo,
             como clientes podem se inscrever a qualquer momento na transmissão, eles devem ser capaz de determinar o
-            fps e qual é o último frame do vídeo.</p>
+            fps e qual é o último <i>frame</i> do vídeo.</p>
 
         <h3>2.2. O Servidor</h3>
         <p>Nesta seção discutiremos sobre a implementação do servidor, com por exemplo: como é realizada a leitura do
@@ -110,44 +110,43 @@
 
         <h4>2.2.1 Inscrições de Clientes</h4>
         <p>Assim que o servidor inicia ele começa a ouvir por inscrições dos clientes. O servidor implementa uma lista de clientes
-            que estão inscritos para receber o streaming de vídeo. Dessa forma, existem mensagens específicas de subscription e
-            unsubscription as quais são conhecidas pelo servidor para realizar a inscrição ou desinscrição de um cliente.
+            que estão inscritos para receber o streaming de vídeo. Dessa forma, existem mensagens específicas de <i>subscription</i> e
+            <i>unsubscription</i> as quais são conhecidas pelo servidor para realizar a inscrição ou desinscrição de um cliente.
         </p>
 
         <h4>2.2.2 Leitura do Vídeo</h4>
         <p>
-          Para esta tarefa, utilizamos a biblioteca OpenCV, uma ferramenta que nos permite ler o vídeo frame por frame.
-          Sabemos que vídeos podem ser transmitidos de forma mais eficiente, mas isso depende do uso de outros procolos específicos,
+          Para esta tarefa, utilizamos a biblioteca OpenCV, uma ferramenta que nos permite ler o vídeo <i>frame</i> por <i>frame</i>.
+          Sabemos que vídeos podem ser transmitidos de forma mais eficiente, mas isso depende do uso de outros protocolos específicos,
           neste caso utilizamos apenas o protocolo UDP para transporte.
         </p>
         <img src="read-video.jpeg" id="read-video-img"/>
         <p class="figure-description"><b>Figura 1</b> - Exemplo de leitura de vídeo com OpenCV</p>
 
         <p>
-          Cada frame é lido e, em seguida, armazenado em uma fila, uma estrutura de dados que a própria biblioteca Queue do Python fornece.
-          Isso garante que o processo de leitura e armazenamento de quadros ocorra de forma organizada e eficiente, permitindo que outra parte
-          do programa se preocupe somente com o envio dos pacotes
+          Cada <i>frame</i> é lido e, em seguida, armazenado em uma fila, uma estrutura de dados que a própria biblioteca Queue do Python fornece.
+          Isso garante que o processo de leitura e armazenamento de <i>frames</i> ocorra de forma organizada e eficiente, permitindo que outra parte
+          do programa se preocupe somente com o envio dos pacotes.
         </p>
 
         <h4>2.2.3 Divisão dos frames em pacotes</h4>
         <p>
-          Com uma thread específica para a leitura do vídeo, criamos outra thread resposável pela divisão do
-          frame em pacotes e envio dos mesmos. Esse processo ocorre da seguinte forma:
+          Além da <i>thread</i> de leitura de vídeo, também criamos uma <i>thread</i> que ficou resposável pela divisão do
+          <i>frame</i> em pacotes e envio dos mesmos. Esse processo ocorre da seguinte forma:
         </p>
 
         <ol id="frame-division-list">
           <li>
-            Obtém um frame da fila;
+            Obtém um <i>frame</i> da fila;
           </li>
           <li>
-            Codifica o frame para o formato JPEG;
+            Codifica o <i>frame</i> para o formato JPEG;
           </li>
           <li>
-            Divide os bytes do frame em pedaços menores, ou seja, em "chunks" com um tamanho máximo de 5000 bytes;
+            Divide os bytes do <i>frame</i> em pedaços menores, ou seja, em <i>chunks</i> com um tamanho máximo de 5000 bytes;
           </li>
           <li>
-            Cada chunk é enviado para os clientes com informações incluídas no cabeçalho do pacote, tais como o índice do frame atual e o índice do chunk.
-            Essa estratégia permite que o cliente organize os pacotes de forma a restaurar a ordem original do vídeo.
+            Envia cada um dos <i>chunks</i> encapsulado no PDU apresentado anteriormente.
           </li>
         </ol>
 
@@ -182,78 +181,60 @@
         </code>
         <p>
             As chaves marcadas como <b>&lt;frame-number&gt;</b> e <b>&lt;packet-sequence&gt;</b> são, respectivamente, o número do
-            frame e a sequência do pacote em específico. Dessa forma conseguimos rapidamente adicionar pacotes recebidos no dicionário
-            do frame ao qual pertencem. Essa estrutura se mostrou bastante útil porque conseguimos obter qualquer pacote já recebido
-            de qualquer frame em tempo médio O(1), tornando assim a ordenação dos pacotes bastante eficiente já que a busca pelo pacote é rápida.
+            <i>frame</i> e a sequência do pacote em específico. Dessa forma conseguimos rapidamente adicionar pacotes recebidos no dicionário
+            do <i>frame</i> ao qual pertencem. Essa estrutura se mostrou bastante útil porque conseguimos obter qualquer pacote já recebido
+            de qualquer <i>frame</i> em tempo médio O(1), tornando assim a ordenação dos pacotes bastante eficiente já que a busca pelo pacote é rápida.
         </p>
-        <p>Uma particularidade da aplicação, a qual é necessária para detectarmos que um frame foi recebido por completo é aquela chave
-            'total' armazenada dentro do dicionário de cada frame. A aplicação recebe esta informação por meio do pacote de sequência 0 de cada frame, ou seja,
-            todo pacote de sequência zero carrega em seu payload a quantidade total de pacotes que o servidor vai enviar para aquele frame, para que assim o cliente
-            saiba quando um frame pode ser montado por completo. Dessa forma, quando o valor de 'received' é igual ao valor de 'total', então o cliente sabe que pode
-            ordenar e montar o frame por completo.
+        <p>Uma particularidade da aplicação, a qual é necessária para detectarmos que um <i>frame</i> foi recebido por completo é aquela chave
+            'total' armazenada dentro do dicionário de cada <i>frame</i>. A aplicação recebe esta informação por meio do pacote de sequência 0 de cada <i>frame</i>, ou seja,
+            todo pacote de sequência zero carrega em seu payload a quantidade total de pacotes que o servidor vai enviar para aquele <i>frame</i>, para que assim o cliente
+            saiba quando um <i>frame</i> pode ser montado por completo. Dessa forma, quando o valor de 'received' é igual ao valor de 'total', então o cliente sabe que pode
+            ordenar e montar o <i>frame</i> por completo.
         </p>
         <p>
-            Por fim, o frame montado é armazenado em um buffer que é então consumido pela thread responsável por rodar o vídeo. Este é um buffer circular simples
-            onde todos os frames prontos vão sendo armazenados até que chegue o momento certo dele ser exibido, sendo este momento definido pelo fps do vídeo que está
+            Por fim, o <i>frame</i> montado é armazenado em um buffer que é então consumido pela <i>thread</i> responsável por rodar o vídeo. Este é um buffer circular simples
+            onde todos os <i>frames</i> prontos vão sendo armazenados até que chegue o momento certo dele ser exibido, sendo este momento definido pelo fps do vídeo que está
             sendo transmitido.
         </p>
 
         <h4>2.3.2. O Player de Vídeo</h4>
         <p>
-            Como mencionado anteriormente, o sistema utiliza um buffer circular para armazenar os quadros à medida que são processados, garantindo que sejam exibidos na tela em ordem.
-            Essa função é desempenhada por uma thread que opera em um loop contínuo enquanto o vídeo ainda não foi concluído ou enquanto o buffer de quadros contém elementos.
-            É importante notar que o sistema identifica o término do vídeo quando recebe a última sequência de dados ('received' igual ao valor 'total') do último quadro ('frame-number' igual a ('total_frames' - 1)), que é fornecida no cabeçalho de cada pacote de dados.
+            Como mencionado anteriormente, o sistema utiliza um buffer circular para armazenar os <i>frames</i> à medida que são processados, garantindo que sejam exibidos na tela em ordem.
+            Essa função é desempenhada por uma <i>thread</i> que opera em um loop contínuo enquanto o vídeo ainda não foi concluído ou enquanto o buffer de <i>frames</i> contém elementos.
+            É importante notar que o sistema identifica o término do vídeo quando recebe o último <i>frame</i> por completo.
         </p>
         <p>
-            Para exibir os quadros na tela do cliente, o sistema utiliza a biblioteca OpenCV.
-            Além disso, para controlar a taxa de quadros por segundo (FPS), é aplicada uma pausa (ou "sleep") de duração adequada (1 / FPS) antes de cada quadro ser exibido.
-            É importante observar que o valor de FPS é transmitido a partir do servidor no cabeçalho de cada pacote de dados e é armazenado em uma variável global para garantir a exibição adequada dos quadros no ritmo correto.
+            Para exibir os <i>frames</i> na tela do cliente, o sistema utiliza a biblioteca OpenCV.
+            Além disso, para controlar a taxa de <i>frames</i> por segundo (FPS), é aplicada um <i>sleep</i> de duração adequada (1 / FPS) antes de cada <i>frame</i> ser exibido.
+            É importante observar que o valor de FPS é transmitido a partir do servidor no cabeçalho de cada pacote de dados e é armazenado em uma variável global para garantir a exibição adequada dos <i>frames</i> na taxa correta.
         </p>
 
         <h4>2.3.3. A Contagem de Pacotes Perdidos</h4>
         <p>
-            Nesta seção, apresentaremos a lógica que a dupla montou para fazer a contagem dos pacotes perdidos.
-        </p>
-
-        <p>
             Como mencionado anteriormente, o cliente mantém uma estrutura de dicionário para armazenar todos os pacotes recebidos.
             Isso facilita a contagem de pacotes e funciona da seguinte maneira:
         </p>
-
         <p>
             Inicialmente, uma variável que armazena a contagem de pacotes é definida como zero.
-            Um loop é executado no dicionário, incrementando essa variável em dois cenários:
+            Um loop percorre o dicionário, incrementando essa variável em dois cenários:
         </p>
-
-        <p>
-            O primeiro cenário ocorre quando a chave 'total' não está presente no quadro.
-            Isso indica que o cliente não recebeu o pacote com a sequência 0 do quadro, que é responsável por informar o número total de pacotes no quadro correspondente.
-            Nesse caso, não é possível determinar com precisão quantos pacotes foram perdidos naquele quadro, pois o pacote que indica o total não foi recebido.
+        <p style="margin: 10px 0px 15px 10px">
+            1. O primeiro cenário ocorre quando a chave 'total' não está presente no <i>frame</i>.
+            Isso indica que o cliente não recebeu o pacote com a sequência 0 do <i>frame</i>, que é responsável por informar o número total de pacotes no <i>frame</i> correspondente.
+            Nesse caso, não é possível determinar com precisão quantos pacotes foram perdidos naquele <i>frame</i>, pois o pacote que indica o total não foi recebido.
             Portanto, soma-se 1 ao valor original da variável de contagem de pacotes perdidos, já que pelo menos um pacote (o inicial) foi perdido.
         </p>
-
-        <p>
-            O segundo cenário que incrementa essa variável é mais direto.
-            Basta subtrair o valor encontrado na chave 'total' pelo valor encontrado na chave 'received' e incrementando esse valor na variável.
+        <p style="margin-left:15px">
+            2. O segundo cenário que incrementa essa variável é mais direto.
+            Basta subtrair o valor encontrado na chave 'total' pelo valor encontrado na chave 'received' e somar esse valor na contagem.
             Isso fornece a contagem exata de pacotes perdidos entre o total esperado e o total realmente recebido.
         </p>
 
         <h4>2.3.4. A Contagem de Pacotes Fora de Ordem</h4>
         <p>
-            Nesta seção, apresentaremos a lógica que a dupla montou para fazer a contagem dos pacotes que chegaram fora da ordem.
-        </p>
-
-        <p>
             Diferentemente de como ocorre a contagem de pacotes perdidos, a contagem de pacotes que chegam fora da ordem ocorre durante a chegada de pacotes do servidor.
-            Basicamente, há uma variável, iniciada em 0, que armazena o número da sequência esperado para o número de sequência do pacote corrente. Se esse valor divergiar e o número de sequência esperado for maior que o número de sequência recebido do pacote imediamente anterior, então a valor da variável e incrementado em 1.
+            Basicamente, existe uma variável iniciada em 0 que armazena o número da sequência esperado para o próximo pacote a ser recebido. Se esse valor divergir e o número de sequência esperado for maior que o número de sequência recebido do pacote imediamente anterior, então o valor da variável é incrementado em 1.
         </p>
-
-
-
-        <p>
-
-        </p>
-
     </main>
     <footer>
         <h3>Desenvolvido por</h3>
