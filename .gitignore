@@ -1,3 +1,4 @@
 *.mp4
 *.logs
 /test
+!/article/example.mp4

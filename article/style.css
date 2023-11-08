@@ -103,6 +103,13 @@ main {
     margin-bottom: 10px;
 }
 
+#video {
+    margin-top: 15px;
+    width: 80%;
+    aspect-ratio: calc(388/218);
+    align-self: center;
+}
+
 footer {
     display: flex;
     flex-direction: column;
